@@ -4,7 +4,7 @@ A standalone Next.js app, owned by Maison, for Maison's B2B partners' own
 employees (e.g. Veridian's) to log in and manage their delegated stock,
 demonstrating:
 
-- **[Auth0 Organizations](https://auth0.com/docs/manage-users/organizations/organizations-overview)** — each B2B partner is a real Auth0 Organization; an employee logs in scoped to their own partner's org, not a plain account with a role bolted on.
+- **[Auth0 Organizations](https://auth0.com/docs/manage-users/organizations/organizations-overview)** — each B2B partner is a real Auth0 Organization; an employee logs in scoped to their own partner's org, not a plain account with a role bolted on..
 - **Organization-based login with enterprise federation** — each partner organization can have its own SAML/OIDC connection.
 - **[Organizations Universal Login self-service management components](https://auth0.com/docs/get-started/universal-components/universal-components-overview)** (`@auth0/universal-components-react`) — member invites, role assignment, and enterprise-connection self-configuration are all Auth0's own pre-built components, not custom UI.
 - **[Auth0 FGA](https://auth0.com/docs/get-started/architecture-scenarios/fine-grained-authorization-with-fga)** — per-product-line `viewer`/`manager` delegation within a partner organization (`lib/fga.ts`).
