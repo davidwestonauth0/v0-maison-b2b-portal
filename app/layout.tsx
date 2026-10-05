@@ -53,6 +53,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <div className="container mx-auto px-4 py-8 max-w-2xl">
             <h1 className="text-2xl font-semibold mb-2">Partner portal unavailable</h1>
             <p className="text-sm text-muted-foreground">{message}</p>
+            <form action="/auth/logout" method="GET" className="mt-4">
+              <button type="submit" className="text-sm text-muted-foreground underline hover:text-foreground">
+                Sign out
+              </button>
+            </form>
           </div>
         </body>
       </html>
