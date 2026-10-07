@@ -36,6 +36,12 @@ export async function proxy(request: NextRequest) {
     response.headers.delete("content-length")
   }
 
+  // The components read permissions from /auth/profile once, on mount; a
+  // failure there silently disables every gated button. Log it.
+  if ((debugMyOrg || process.env.DEBUG_SESSION_CLAIMS) && pathname === "/auth/profile" && response) {
+    console.log(`[profile] ${request.method} /auth/profile -> ${response.status} session-cookie=${request.cookies.has("__session")}`)
+  }
+
   if (debugMyOrg && isApiProxy && response) {
     const line = `[my-org] ${request.method} ${pathname}${search.slice(0, 80)} scope="${auth0Scope ?? ""}" -> ${response.status}`
     if (response.status >= 400) {
