@@ -13,7 +13,7 @@ export default async function PortalStockPage() {
 
   try {
     const context = await getPartnerContext()
-    const items = await listPartnerStock(context.stockApiBaseUrl, context.stockApiAudience)
+    const items = await listPartnerStock(context.stockApiBaseUrl, context.stockApiAudience, context.stockApiTokenDomain)
     const lines = Array.from(new Set(items.map((item) => item.category)))
     const canManageByLine = new Map<string, boolean>()
     const canViewByLine = new Map<string, boolean>()

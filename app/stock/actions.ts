@@ -35,7 +35,7 @@ export async function updateStockQuantity(
   }
 
   try {
-    await updatePartnerStockQuantity(context.stockApiBaseUrl, context.stockApiAudience, productId, quantity)
+    await updatePartnerStockQuantity(context.stockApiBaseUrl, context.stockApiAudience, productId, quantity, context.stockApiTokenDomain)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update stock"
     return { ok: false, error: message }

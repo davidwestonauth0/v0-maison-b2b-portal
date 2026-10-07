@@ -20,6 +20,8 @@ export interface PartnerContext {
   stockApiBaseUrl: string
   /** Audience of the M2M token this portal must present to that partner's stock API. */
   stockApiAudience: string
+  /** Auth0 domain to request that token from (the partner API's expected `iss`). Undefined = this tenant's canonical domain. */
+  stockApiTokenDomain?: string
 }
 
 export class PartnerContextError extends Error {}
@@ -57,5 +59,6 @@ export async function getPartnerContext(): Promise<PartnerContext> {
     fgaSlug: metadata.fga_slug || orgId,
     stockApiBaseUrl,
     stockApiAudience,
+    stockApiTokenDomain: metadata.stock_api_token_domain || undefined,
   }
 }

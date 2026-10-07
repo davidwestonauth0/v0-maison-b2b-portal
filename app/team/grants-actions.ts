@@ -20,7 +20,7 @@ export async function loadProductLineGrants(): Promise<ProductLineGrantsData> {
   const context = await getPartnerContext()
 
   const [stock, members] = await Promise.all([
-    listPartnerStock(context.stockApiBaseUrl, context.stockApiAudience),
+    listPartnerStock(context.stockApiBaseUrl, context.stockApiAudience, context.stockApiTokenDomain),
     listOrganizationMembers(context.orgId),
   ])
   const productLines = Array.from(new Set(stock.map((item) => item.category)))

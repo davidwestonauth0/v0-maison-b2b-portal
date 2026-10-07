@@ -18,6 +18,7 @@
 //     --name veridian --display-name Veridian \
 //     --stock-api-base-url https://veridian.westondemos.co.uk \
 //     --stock-api-audience https://veridian.westondemos.co.uk/api/portal \
+//     [--stock-api-token-domain login.veridian.westondemos.co.uk  (domain the partner API validates iss against)] \
 //     [--products-api-url https://veridian.westondemos.co.uk/api/products] \
 //     [--admin-user-id auth0|...] \
 //     [--grant-id <id of the client grant (Auth0 Management API /client-grants) linking the partner's
@@ -186,7 +187,9 @@ async function seedFgaTuples(fgaSlug, productLines, adminUserId) {
     console.log("[provision] nothing to write to FGA")
     return
   }
-  await fga.write({ writes })
+  // Ignore tuples that already exist so re-running for the same partner
+  // (e.g. to add another admin) doesn't fail the whole atomic write.
+  await fga.write({ writes }, { conflict: { onDuplicateWrites: "ignore" } })
   console.log(`[provision] wrote ${writes.length} FGA tuples`)
 }
 
@@ -201,6 +204,7 @@ async function main() {
   const metadata = {
     stock_api_base_url: stockApiBaseUrl,
     stock_api_audience: stockApiAudience,
+    ...(args["stock-api-token-domain"] ? { stock_api_token_domain: args["stock-api-token-domain"] } : {}),
     fga_slug: fgaSlug,
   }
 

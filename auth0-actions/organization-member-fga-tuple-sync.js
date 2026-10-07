@@ -4,7 +4,8 @@
  * Event Stream-bound Action, configured under Monitoring > Event Streams >
  * create a stream > "Actions" delivery, or Actions > Flows > "Event Stream"
  * trigger depending on dashboard version) subscribed to
- * organization.member.added and organization.member.deleted.
+ * organization.member.added, organization.member.deleted,
+ * organization.member.role.assigned and organization.member.role.deleted.
  *
  * Unlike every other Action in this directory, this one has no token to
  * modify and doesn't run as part of an interactive login — it's a pure
@@ -24,9 +25,15 @@
  * itself never hardcodes a partner — see scripts/provision-partner-org.mjs
  * for what sets that metadata.
  *
- * Writes/deletes the FGA "member" relation tuple this app's own
- * lib/fga.ts (isOrganizationAdmin / checkProductLineAccess's org-admin
- * inheritance) depends on — organization:<slug>#member@user:<user_id>.
+ * Writes/deletes the FGA tuples this app's own lib/fga.ts
+ * (isOrganizationAdmin / checkProductLineAccess's org-admin inheritance)
+ * depends on:
+ *   - organization:<slug>#member@user:<user_id>, from member.added/deleted
+ *   - organization:<slug>#admin@user:<user_id>, from member.role.assigned/
+ *     deleted when the role's name is the admin role (default "admin",
+ *     override with the ORG_ADMIN_ROLE_NAME secret). Removing a member from
+ *     the org also removes their admin tuple.
+ * No other role names affect FGA.
  * Product-line-level manager/viewer grants are NOT touched here; those are
  * written directly by the portal's own delegated-admin UI
  * (app/team/actions.ts), since there's no Auth0 lifecycle event for an
@@ -88,24 +95,39 @@ async function getOrganizationFgaSlug(domain, token, orgId) {
 exports.onExecuteEventStream = async (event) => {
   // event.message is CloudEvents-shaped (id/type/source/specversion/data) —
   // the actual organization/member payload is nested under
-  // event.message.data, not event.data directly. Verify the exact shape of
-  // data.organization/data.user against a live test event in the Dashboard
-  // before relying on this in production — Auth0's own reference doesn't
-  // publish a filled-in example for this specific event type as of writing.
+  // event.message.data.object, not event.message.data directly. Falls back
+  // to data itself in case a payload isn't wrapped in `object`. The
+  // organization/user field names inside it (organization.id, user.user_id)
+  // were observed from a live event in the Event Stream log — re-check them
+  // against a test event if Auth0 changes the schema.
   const message = event.message || {}
   const eventType = message.type
   const data = message.data || {}
-  const orgId = data.organization && data.organization.id
-  const userId = data.user && data.user.user_id
+  const payload = data.object || data
+  const orgId = payload.organization && payload.organization.id
+  const userId = payload.user && payload.user.user_id
 
-  console.log("[org-fga-sync] received event:", { eventType, orgId, userId })
+  const roleName = payload.role && payload.role.name
+
+  console.log("[org-fga-sync] received event:", { eventType, orgId, userId, roleName })
 
   if (!orgId || !userId) {
     console.log("[org-fga-sync] missing organization id or user id — skipping")
     return
   }
-  if (eventType !== "organization.member.added" && eventType !== "organization.member.deleted") {
+  const handled = [
+    "organization.member.added",
+    "organization.member.deleted",
+    "organization.member.role.assigned",
+    "organization.member.role.deleted",
+  ]
+  if (!handled.includes(eventType)) {
     console.log("[org-fga-sync] unhandled event type — skipping:", eventType)
+    return
+  }
+  const isRoleEvent = eventType.startsWith("organization.member.role.")
+  if (isRoleEvent && roleName !== (event.secrets.ORG_ADMIN_ROLE_NAME || "admin")) {
+    console.log("[org-fga-sync] role is not the admin role — skipping:", roleName)
     return
   }
 
@@ -138,15 +160,31 @@ exports.onExecuteEventStream = async (event) => {
     },
   })
 
-  const tuple = { user: `user:${userId}`, relation: "member", object: `organization:${orgSlug}` }
+  const object = `organization:${orgSlug}`
+  const memberTuple = { user: `user:${userId}`, relation: "member", object }
+  const adminTuple = { user: `user:${userId}`, relation: "admin", object }
+
+  // Idempotent both ways: a tuple may already exist (e.g. seeded by
+  // scripts/provision-partner-org.mjs) or already be gone, which FGA
+  // otherwise rejects.
+  const write = (tuples) =>
+    fgaClient.write({ writes: tuples }, { conflict: { onDuplicateWrites: "ignore" } })
+  const remove = (tuples) =>
+    fgaClient.write({ deletes: tuples }, { conflict: { onMissingDeletes: "ignore" } })
 
   try {
     if (eventType === "organization.member.added") {
-      console.log("[org-fga-sync] writing member tuple:", tuple)
-      await fgaClient.write({ writes: [tuple] })
+      console.log("[org-fga-sync] writing member tuple:", memberTuple)
+      await write([memberTuple])
+    } else if (eventType === "organization.member.deleted") {
+      console.log("[org-fga-sync] deleting member and admin tuples:", memberTuple, adminTuple)
+      await remove([memberTuple, adminTuple])
+    } else if (eventType === "organization.member.role.assigned") {
+      console.log("[org-fga-sync] writing admin tuple:", adminTuple)
+      await write([adminTuple])
     } else {
-      console.log("[org-fga-sync] deleting member tuple:", tuple)
-      await fgaClient.write({ deletes: [tuple] })
+      console.log("[org-fga-sync] deleting admin tuple:", adminTuple)
+      await remove([adminTuple])
     }
   } catch (error) {
     console.error("[org-fga-sync] FGA write failed:", error)

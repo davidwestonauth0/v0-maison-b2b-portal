@@ -22,8 +22,11 @@ const PORTAL_M2M_CLIENT_SECRET = process.env.PORTAL_M2M_CLIENT_SECRET || ""
 // authorized (via a Client Grant) for every partner's stock API audience.
 const tokenCache = new Map<string, { token: string; expiresAt: number }>()
 
-async function getPartnerToken(audience: string): Promise<string> {
-  const domain = process.env.AUTH0_CANONICAL_DOMAIN || process.env.AUTH0_ISSUER_BASE_URL || process.env.AUTH0_DOMAIN || ""
+// tokenDomain is the Auth0 domain the partner's stock API validates `iss`
+// against (its own custom domain, from the organization's
+// stock_api_token_domain metadata). Falls back to this tenant's canonical domain.
+async function getPartnerToken(audience: string, tokenDomain?: string): Promise<string> {
+  const domain = tokenDomain || process.env.AUTH0_CANONICAL_DOMAIN || process.env.AUTH0_ISSUER_BASE_URL || process.env.AUTH0_DOMAIN || ""
   if (!domain || !PORTAL_M2M_CLIENT_ID || !PORTAL_M2M_CLIENT_SECRET) {
     throw new Error(
       "Partner portal M2M client is not configured. Set PORTAL_M2M_CLIENT_ID and PORTAL_M2M_CLIENT_SECRET " +
@@ -32,7 +35,8 @@ async function getPartnerToken(audience: string): Promise<string> {
   }
   const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 
-  const cached = tokenCache.get(audience)
+  const cacheKey = `${cleanDomain}|${audience}`
+  const cached = tokenCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now() + 30_000) {
     return cached.token
   }
@@ -52,7 +56,7 @@ async function getPartnerToken(audience: string): Promise<string> {
     throw new Error(`Partner stock API token request failed for audience ${audience} (${res.status}): ${body}`)
   }
   const data = (await res.json()) as { access_token: string; expires_in: number }
-  tokenCache.set(audience, { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 })
+  tokenCache.set(cacheKey, { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 })
   return data.access_token
 }
 
@@ -65,14 +69,19 @@ export interface PartnerStockItem {
   stock_quantity: number
 }
 
-export async function listPartnerStock(baseUrl: string, audience: string): Promise<PartnerStockItem[]> {
-  const token = await getPartnerToken(audience)
+export async function listPartnerStock(
+  baseUrl: string,
+  audience: string,
+  tokenDomain?: string,
+): Promise<PartnerStockItem[]> {
+  const token = await getPartnerToken(audience, tokenDomain)
   const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/portal/stock`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   })
   if (!res.ok) {
-    throw new Error(`Partner stock list failed (${res.status})`)
+    const body = await res.text().catch(() => "")
+    throw new Error(`Partner stock list failed (${res.status}): ${body.slice(0, 200)}`)
   }
   const body = (await res.json()) as { data: PartnerStockItem[] }
   return body.data
@@ -83,8 +92,9 @@ export async function updatePartnerStockQuantity(
   audience: string,
   productId: string,
   quantity: number,
+  tokenDomain?: string,
 ): Promise<void> {
-  const token = await getPartnerToken(audience)
+  const token = await getPartnerToken(audience, tokenDomain)
   const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/portal/stock/${encodeURIComponent(productId)}`, {
     method: "PATCH",
     headers: {
