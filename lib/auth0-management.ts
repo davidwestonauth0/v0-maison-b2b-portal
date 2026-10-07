@@ -83,6 +83,7 @@ export interface Organization {
   name: string
   display_name?: string
   metadata?: Record<string, string>
+  branding?: { logo_url?: string; colors?: { primary?: string; page_background?: string } }
 }
 
 export async function getOrganizationByName(name: string): Promise<Organization | null> {

@@ -1,11 +1,12 @@
 import type { Metadata } from "next"
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { auth0, isAuth0Configured } from "@/lib/auth0"
 import { PortalNav } from "@/components/nav"
 import { PortalComponentProvider } from "@/components/component-provider"
 import { getPartnerContext, PartnerContextError } from "@/lib/partner-context"
+import { isPortalAdmin } from "@/lib/portal-role"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -64,15 +65,30 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     )
   }
 
+  const isAdmin = await isPortalAdmin()
+  // Organization branding (Auth0 Organization > Branding) — logo and colors.
+  const branding = context.organization.branding
+  const brandStyle = {
+    ...(branding?.colors?.primary ? { "--brand-primary": branding.colors.primary } : {}),
+    ...(branding?.colors?.page_background ? { "--brand-background": branding.colors.page_background } : {}),
+  } as CSSProperties
+  const partnerName = context.organization.display_name ?? context.organization.name
+
   return (
     <html lang="en">
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased" style={brandStyle}>
         <PortalComponentProvider>
-          <div className="min-h-screen bg-muted/30">
+          <div className="min-h-screen bg-muted/30" style={branding?.colors?.page_background ? { backgroundColor: "var(--brand-background)" } : undefined}>
             <header className="border-b border-border bg-background">
               <div className="container mx-auto px-4 py-4 flex items-center justify-between max-w-5xl">
-                <Link href="/" className="text-lg font-semibold">
-                  {context.organization.display_name ?? context.organization.name} Partner Portal
+                <Link href="/" className="flex items-center gap-3 text-lg font-semibold">
+                  {branding?.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={branding.logo_url} alt={partnerName} className="h-8 w-auto" />
+                  ) : null}
+                  <span style={branding?.colors?.primary ? { color: "var(--brand-primary)" } : undefined}>
+                    {partnerName} Partner Portal
+                  </span>
                 </Link>
                 <form action="/auth/logout" method="GET">
                   <button type="submit" className="text-sm text-muted-foreground hover:text-foreground">
@@ -81,7 +97,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 </form>
               </div>
               <div className="container mx-auto px-4 max-w-5xl">
-                <PortalNav />
+                <PortalNav isAdmin={isAdmin} />
               </div>
             </header>
             <main className="container mx-auto px-4 py-8 max-w-5xl">{children}</main>

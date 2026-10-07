@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server"
 import { auth0 } from "@/lib/auth0"
 
+const debugMyOrg = process.env.NODE_ENV !== "production"
+
 export async function proxy(request: NextRequest) {
   if (!auth0) return
 
@@ -10,15 +12,30 @@ export async function proxy(request: NextRequest) {
   // SDK exchanges the refresh token with scope=null, Auth0 returns a token
   // with no my_org scopes, and every My Organization call 403s
   // ("Insufficient Scope").
-  const { pathname } = request.nextUrl
+  const { pathname, search } = request.nextUrl
+  const isApiProxy = pathname.startsWith("/my-org/") || pathname.startsWith("/me/")
   const auth0Scope = request.headers.get("auth0-scope")
-  if (auth0Scope && !request.headers.has("scope") && (pathname.startsWith("/my-org/") || pathname.startsWith("/me/"))) {
+
+  let forwarded = request
+  if (isApiProxy && auth0Scope && !request.headers.has("scope")) {
     const headers = new Headers(request.headers)
     headers.set("scope", auth0Scope)
-    return await auth0.middleware(new NextRequest(request, { headers }))
+    forwarded = new NextRequest(request, { headers })
   }
 
-  return await auth0.middleware(request)
+  const response = await auth0.middleware(forwarded)
+
+  if (debugMyOrg && isApiProxy && response) {
+    const line = `[my-org] ${request.method} ${pathname}${search.slice(0, 80)} scope="${auth0Scope ?? ""}" -> ${response.status}`
+    if (response.status >= 400) {
+      const body = await response.clone().text().catch(() => "")
+      console.log(line, body.slice(0, 400))
+    } else {
+      console.log(line)
+    }
+  }
+
+  return response
 }
 
 export const config = {

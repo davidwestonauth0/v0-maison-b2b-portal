@@ -1,4 +1,4 @@
-import { Auth0Client } from "@auth0/nextjs-auth0/server"
+import { Auth0Client, filterDefaultIdTokenClaims } from "@auth0/nextjs-auth0/server"
 import { NextResponse } from "next/server"
 import { authSessionStore } from "@/lib/auth0-session-store"
 
@@ -19,6 +19,7 @@ const domain = getDomain()
 const clientId = process.env.AUTH0_CLIENT_ID || ""
 const clientSecret = process.env.AUTH0_CLIENT_SECRET || ""
 const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:3000"
+const rolesClaim = process.env.ROLES_CLAIM || "https://login.maison.westondemos.co.uk/roles"
 const secret = process.env.AUTH0_SECRET || "a-long-secret-value-for-development-only"
 
 export const isAuth0Configured = Boolean(domain && clientId && clientSecret)
@@ -44,6 +45,12 @@ export const auth0 = isAuth0Configured
       secret,
       enableTelemetry: false,
       sessionStore: authSessionStore,
+      // Same as the SDK default (default ID token claims only), plus the roles
+      // claim so the portal can show admin-only sections.
+      async beforeSessionSaved(session) {
+        const roles = session.user[rolesClaim]
+        return { ...session, user: { ...filterDefaultIdTokenClaims(session.user), ...(roles ? { [rolesClaim]: roles } : {}) } }
+      },
       authorizationParameters: {
         scope: "openid profile email offline_access",
       },
