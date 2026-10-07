@@ -49,6 +49,14 @@ export const auth0 = isAuth0Configured
       // claim so the portal can show admin-only sections.
       async beforeSessionSaved(session) {
         const roles = session.user[rolesClaim]
+        if (process.env.NODE_ENV !== "production" || process.env.DEBUG_SESSION_CLAIMS) {
+          console.log(
+            "[session-claims] saving session user; has permissions claim:",
+            Array.isArray(session.user["urn:auth0:my_org_current_user_permissions"]),
+            "| has roles claim:",
+            Boolean(roles),
+          )
+        }
         return { ...session, user: { ...filterDefaultIdTokenClaims(session.user), ...(roles ? { [rolesClaim]: roles } : {}) } }
       },
       authorizationParameters: {
