@@ -5,26 +5,31 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
+  /* Fallback palette = the tenant's Universal Login theme (Branding > Universal
+     Login). An organization's own branding (logo, primary, page background)
+     overrides --primary/--background per request in app/layout.tsx. */
+  --background: #FDFBFA;
+  --foreground: #0F0A09;
+  --card: #FDFBFA;
+  --card-foreground: #0F0A09;
+  --popover: #FDFBFA;
+  --popover-foreground: #0F0A09;
+  --primary: #2B1E1C;
+  --primary-foreground: #F9F8F7;
+  --secondary: #F7F0EB;
+  --secondary-foreground: #0F0A09;
+  --muted: #F7F0EB;
+  --muted-foreground: #6E5F5D;
+  --accent: #F7F0EB;
+  --accent-foreground: #0F0A09;
+  --destructive: #82181A;
+  --destructive-foreground: #F9F8F7;
+  --border: #EAE3DE;
+  --input: #EAE3DE;
+  --ring: #AC543F;
+  --radius: 6px;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Cormorant Garamond", ui-serif, Georgia, serif;
 }
 
 .dark {
@@ -81,5 +86,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+  h1,
+  h2 {
+    font-family: var(--font-heading);
   }
 }

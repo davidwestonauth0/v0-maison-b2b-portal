@@ -25,6 +25,17 @@ export async function proxy(request: NextRequest) {
 
   const response = await auth0.middleware(forwarded)
 
+  // The SDK's /my-org and /me proxy forwards the upstream response headers
+  // but reads the body through fetch, which has already decompressed it. A
+  // leftover `content-encoding: gzip|br` (and the compressed `content-length`)
+  // makes the browser try to decode a plain body again, which fails with
+  // net::ERR_CONTENT_DECODING_FAILED whenever the upstream (Auth0 custom
+  // domain / CDN) compresses its response.
+  if (isApiProxy && response) {
+    response.headers.delete("content-encoding")
+    response.headers.delete("content-length")
+  }
+
   if (debugMyOrg && isApiProxy && response) {
     const line = `[my-org] ${request.method} ${pathname}${search.slice(0, 80)} scope="${auth0Scope ?? ""}" -> ${response.status}`
     if (response.status >= 400) {

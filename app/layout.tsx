@@ -14,6 +14,10 @@ export const metadata: Metadata = {
   description: "Delegated stock management for Maison's B2B partners' own employees, built on Auth0 Organizations and FGA.",
 }
 
+// Font from the tenant's Universal Login theme (Branding > Universal Login > Fonts).
+const THEME_FONT_URL =
+  "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Geist:wght@300;400;500;600;700&display=swap"
+
 export default async function RootLayout({ children }: { children: ReactNode }) {
   if (!isAuth0Configured || !auth0) {
     return (
@@ -69,13 +73,17 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // Organization branding (Auth0 Organization > Branding) — logo and colors.
   const branding = context.organization.branding
   const brandStyle = {
-    ...(branding?.colors?.primary ? { "--brand-primary": branding.colors.primary } : {}),
+    ...(branding?.colors?.primary ? { "--primary": branding.colors.primary, "--brand-primary": branding.colors.primary } : {}),
     ...(branding?.colors?.page_background ? { "--brand-background": branding.colors.page_background } : {}),
   } as CSSProperties
   const partnerName = context.organization.display_name ?? context.organization.name
 
   return (
     <html lang="en">
+      <head>
+        <link rel="stylesheet" href={THEME_FONT_URL} />
+        {branding?.logo_url ? <link rel="icon" href={branding.logo_url} /> : null}
+      </head>
       <body className="font-sans antialiased" style={brandStyle}>
         <PortalComponentProvider>
           <div className="min-h-screen bg-muted/30" style={branding?.colors?.page_background ? { backgroundColor: "var(--brand-background)" } : undefined}>
