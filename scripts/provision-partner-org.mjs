@@ -312,7 +312,12 @@ async function main() {
   } catch {
     existingMetadata = undefined
   }
-  Object.assign(metadata, buildSecurityMetadata(args, existingMetadata))
+  // PATCH /organizations/{id} replaces the whole metadata object, so start from
+  // what the org already has (stock keys, saved security policy, anything else)
+  // and overlay this run's values.
+  const merged = { ...(existingMetadata ?? {}), ...metadata, ...buildSecurityMetadata(args, existingMetadata) }
+  for (const key of Object.keys(metadata)) delete metadata[key]
+  Object.assign(metadata, merged)
 
   const org = await ensureOrganization(token, orgName, displayName, metadata)
   await ensureClientEnabled(token, org.id, args["grant-id"])

@@ -108,16 +108,25 @@ export async function getOrganizationById(orgId: string): Promise<Organization |
 }
 
 /**
- * Sets organization metadata keys. Auth0 merges metadata by key, so keys not
- * listed here (e.g. stock_api_base_url) are left alone; a null value deletes a key.
+ * Sets organization metadata keys without disturbing the others.
+ *
+ * PATCH /organizations/{id} REPLACES the whole metadata object (it does not
+ * merge by key), so this reads the current metadata, applies the changes and
+ * writes the merged result back. A null value deletes that key.
  */
 export async function updateOrganizationMetadata(
   orgId: string,
-  metadata: Record<string, string | null>,
+  changes: Record<string, string | null>,
 ): Promise<Organization> {
+  const current = await mgmtFetch<Organization>(`/organizations/${encodeURIComponent(orgId)}`)
+  const merged: Record<string, string> = { ...(current.metadata ?? {}) }
+  for (const [key, value] of Object.entries(changes)) {
+    if (value === null) delete merged[key]
+    else merged[key] = value
+  }
   return mgmtFetch<Organization>(`/organizations/${encodeURIComponent(orgId)}`, {
     method: "PATCH",
-    body: JSON.stringify({ metadata }),
+    body: JSON.stringify({ metadata: merged }),
   })
 }
 
