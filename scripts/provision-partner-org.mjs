@@ -21,6 +21,15 @@
 //     [--stock-api-token-domain login.veridian.westondemos.co.uk  (domain the partner API validates iss against)] \
 //     [--products-api-url https://veridian.westondemos.co.uk/api/products] \
 //     [--admin-user-id auth0|...] \
+//     [security policy — only written if at least one of these is given; otherwise
+//      any policy already saved on the org (e.g. from the portal's Security policies
+//      page) is left untouched. Flags override the org's existing policy, or the
+//      defaults if it has none:]
+//     [--mfa-enforce true|false] [--allow-remember true|false] [--mfa-interval <minutes>] \
+//     [--stepup-actions manage:stock,manage:team,manage:security] \
+//     [--mfa-factors phone,otp,webauthn-platform,email,recovery-code] \
+//     [--ip-allow-list "10.0.0.0/8,192.168.1.0/24"] [--ip-deny-list "..."] \
+//     [--session-timeout <minutes>] [--session-idle-timeout <minutes>] \
 //     [--grant-id <id of the client grant (Auth0 Management API /client-grants) linking the partner's
 //                  application to its API audience, to enable for this org>]
 //
@@ -92,6 +101,91 @@ async function mgmtFetch(token, path, options = {}) {
   if (!res.ok) throw new Error(`Management API ${options.method ?? "GET"} ${path} failed (${res.status}): ${await res.text()}`)
   if (res.status === 204) return undefined
   return res.json()
+}
+
+// Mirrors lib/security-policy.ts (DEFAULT_POLICY / DEFAULT_FACTORS / STEPUP_ACTIONS /
+// FACTORS). Keep in sync — this script is plain Node and can't import the TS module.
+const DEFAULT_POLICY = {
+  enforce: false,
+  allowRemember: false,
+  interval: 15,
+  stepupActions: [],
+  ipAllowList: "",
+  ipDenyList: "",
+  sessionTimeout: 120,
+  sessionIdleTimeout: 60,
+}
+const STEPUP_ACTIONS = ["manage:stock", "manage:team", "manage:security"]
+const FACTORS = ["phone", "otp", "webauthn-platform", "email", "recovery-code"]
+// Auth0 organization metadata values are limited to 255 characters each.
+const METADATA_VALUE_MAX = 255
+
+const POLICY_FLAGS = [
+  "mfa-enforce",
+  "allow-remember",
+  "mfa-interval",
+  "stepup-actions",
+  "mfa-factors",
+  "ip-allow-list",
+  "ip-deny-list",
+  "session-timeout",
+  "session-idle-timeout",
+]
+
+function parseBool(name, value) {
+  if (value === "true") return true
+  if (value === "false") return false
+  throw new Error(`--${name} must be true or false (got "${value}")`)
+}
+
+function parseMinutes(name, value) {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 1) throw new Error(`--${name} must be a whole number of minutes >= 1 (got "${value}")`)
+  return n
+}
+
+function parseList(name, value, allowed) {
+  const items = value.split(",").map((v) => v.trim()).filter(Boolean)
+  const unknown = items.filter((v) => !allowed.includes(v))
+  if (unknown.length) throw new Error(`--${name}: unknown value(s) ${unknown.join(", ")} (allowed: ${allowed.join(", ")})`)
+  return items
+}
+
+function safeParse(raw, fallback) {
+  try {
+    return { ...fallback, ...JSON.parse(raw) }
+  } catch {
+    return fallback
+  }
+}
+
+// Returns { securityPolicy, factors } metadata strings to write, or {} if no policy flag was given.
+function buildSecurityMetadata(args, existingMetadata) {
+  if (!POLICY_FLAGS.some((flag) => args[flag] !== undefined)) return {}
+
+  const policy = safeParse(existingMetadata?.securityPolicy, DEFAULT_POLICY)
+  let factors = safeParse(existingMetadata?.factors, { factors: [] }).factors
+
+  if (args["mfa-enforce"] !== undefined) policy.enforce = parseBool("mfa-enforce", args["mfa-enforce"])
+  if (args["allow-remember"] !== undefined) policy.allowRemember = parseBool("allow-remember", args["allow-remember"])
+  if (args["mfa-interval"] !== undefined) policy.interval = parseMinutes("mfa-interval", args["mfa-interval"])
+  if (args["stepup-actions"] !== undefined) policy.stepupActions = parseList("stepup-actions", args["stepup-actions"], STEPUP_ACTIONS)
+  if (args["mfa-factors"] !== undefined) factors = parseList("mfa-factors", args["mfa-factors"], FACTORS)
+  if (args["ip-allow-list"] !== undefined) policy.ipAllowList = args["ip-allow-list"].trim()
+  if (args["ip-deny-list"] !== undefined) policy.ipDenyList = args["ip-deny-list"].trim()
+  if (args["session-timeout"] !== undefined) policy.sessionTimeout = parseMinutes("session-timeout", args["session-timeout"])
+  if (args["session-idle-timeout"] !== undefined)
+    policy.sessionIdleTimeout = parseMinutes("session-idle-timeout", args["session-idle-timeout"])
+
+  const securityPolicy = JSON.stringify(policy)
+  const factorsJson = JSON.stringify({ factors })
+  for (const [key, value] of [["securityPolicy", securityPolicy], ["factors", factorsJson]]) {
+    if (value.length > METADATA_VALUE_MAX) {
+      throw new Error(`${key} is ${value.length} characters; Auth0 metadata values are limited to ${METADATA_VALUE_MAX} — shorten the IP lists`)
+    }
+  }
+  console.log("[provision] writing security policy:", { ...policy, factors })
+  return { securityPolicy, factors: factorsJson }
 }
 
 async function ensureOrganization(token, orgName, displayName, metadata) {
@@ -209,6 +303,17 @@ async function main() {
   }
 
   const token = await getManagementToken()
+
+  // Security policy is opt-in; start from whatever the org already has so
+  // flags override individual fields instead of resetting the rest.
+  let existingMetadata
+  try {
+    existingMetadata = (await mgmtFetch(token, `/organizations/name/${encodeURIComponent(orgName)}`)).metadata
+  } catch {
+    existingMetadata = undefined
+  }
+  Object.assign(metadata, buildSecurityMetadata(args, existingMetadata))
+
   const org = await ensureOrganization(token, orgName, displayName, metadata)
   await ensureClientEnabled(token, org.id, args["grant-id"])
   const productLines = await fetchProductLines(args["products-api-url"])

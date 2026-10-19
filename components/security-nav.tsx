@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 const LINKS = [
   { href: "/security/idp-management", label: "Enterprise connections" },
   { href: "/security/domains", label: "Domains" },
+  { href: "/security/policies", label: "Security policies" },
   { href: "/security/organization", label: "Organization details" },
 ]
 

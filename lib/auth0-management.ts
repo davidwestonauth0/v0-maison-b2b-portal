@@ -107,6 +107,20 @@ export async function getOrganizationById(orgId: string): Promise<Organization |
   }
 }
 
+/**
+ * Sets organization metadata keys. Auth0 merges metadata by key, so keys not
+ * listed here (e.g. stock_api_base_url) are left alone; a null value deletes a key.
+ */
+export async function updateOrganizationMetadata(
+  orgId: string,
+  metadata: Record<string, string | null>,
+): Promise<Organization> {
+  return mgmtFetch<Organization>(`/organizations/${encodeURIComponent(orgId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ metadata }),
+  })
+}
+
 export async function createOrganization(
   name: string,
   displayName: string,
